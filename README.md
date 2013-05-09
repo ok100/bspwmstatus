@@ -7,5 +7,7 @@ To build dwmstatus, you will need the following libraries:
 
 * libx11
 * wireless_tools
-* alsa-lib
 * libmpdclient
+
+*Note:* Volume status is read from file `$HOME/.volume`. To have this file updated
+automatically, you can bind the script `volume` to your volume control keys.

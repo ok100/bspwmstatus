@@ -2,14 +2,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <alsa/asoundlib.h>
 #include <iwlib.h>
 #include <mpd/client.h>
 #include <X11/Xlib.h>
 
 #define UPDATE_INTERVAL 2
 #define CLOCK_FORMAT "%H:%M"
-#define VOLUME "Master"
 #define WIRED_DEVICE "enp4s0"
 #define WIRELESS_DEVICE "wlan0"
 
@@ -154,36 +152,17 @@ char *get_mpd(char *buf)
 
 char *get_vol(char *buf)
 {
-	long vol, min, max;
-	int vol_perc, unmuted;
-	snd_mixer_t *mixer;
-	snd_mixer_elem_t *pcm_mixer, *mas_mixer;
-	snd_mixer_selem_id_t *vol_info, *mute_info;
-
-	snd_mixer_open(&mixer, 0);
-	snd_mixer_attach(mixer, "default");
-	snd_mixer_selem_register(mixer, NULL, NULL);
-	snd_mixer_load(mixer);
-	snd_mixer_selem_id_malloc(&vol_info);
-	snd_mixer_selem_id_malloc(&mute_info);
-	snd_mixer_selem_id_set_name(vol_info, VOLUME);
-	snd_mixer_selem_id_set_name(mute_info, VOLUME);
-	pcm_mixer = snd_mixer_find_selem(mixer, vol_info);
-	mas_mixer = snd_mixer_find_selem(mixer, mute_info);
-	snd_mixer_selem_get_playback_volume_range((snd_mixer_elem_t *)pcm_mixer, &min, &max);
-	snd_mixer_selem_get_playback_volume(pcm_mixer, SND_MIXER_SCHN_MONO, &vol);
-	snd_mixer_selem_get_playback_switch(mas_mixer, SND_MIXER_SCHN_MONO, &unmuted);
-	if(unmuted) {
-		vol_perc = (vol * 100) / max;
-		sprintf(buf, "%d", vol_perc);
+	FILE *f;
+	char fn[50];
+	
+	sprintf(fn, "%s/.volume", getenv("HOME"));
+	f = fopen(fn, "r");
+	if(f == NULL) {
+		sprintf(buf, "N/A");
+		return buf;
 	}
-	else {
-		strcpy(buf, "M");
-	}
-	snd_mixer_selem_id_free(vol_info);
-	snd_mixer_selem_id_free(mute_info);
-	snd_mixer_close(mixer);
-
+	fscanf(f, "%s", buf);
+	fclose(f);
 	return buf;
 }
 

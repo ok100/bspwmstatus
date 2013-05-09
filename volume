@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Usage: volume 2+
+#        volume 2-
+#        volume toggle
+
+CHANNEL="Master"
+
+amixer -q set $CHANNEL $1
+muted=$(amixer get $CHANNEL | grep "\[off\]")
+volume=$(amixer get $CHANNEL | tail -n1 | cut -d"[" -f2 | cut -d"%" -f1)
+if [ -n "$muted" ]; then
+	echo "M" > $HOME/.volume
+else
+	echo $volume > $HOME/.volume
+fi
