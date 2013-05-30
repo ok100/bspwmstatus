@@ -1,7 +1,7 @@
 dwmstatus
 =========
 
-![screenshot](http://pictat.com/i/2013/5/8/10895dwmstatus.png)
+![screenshot](http://pictat.com/i/2013/5/30/374992013053018.png)
 
 To build dwmstatus, you will need the following libraries:
 
