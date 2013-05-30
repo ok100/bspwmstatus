@@ -7,7 +7,7 @@
 #include <X11/Xlib.h>
 
 #define UPDATE_INTERVAL 2
-#define CLOCK_FORMAT "%H:%M"
+#define CLOCK_FORMAT "\x01%a\x02%d\x01%b\x02%H:%M"
 #define WIRED_DEVICE "enp4s0"
 #define WIRELESS_DEVICE "wlan0"
 
@@ -60,7 +60,8 @@ long get_work_jiffies()
 
 float get_cpu(long total_jiffies, long work_jiffies)
 {
-	long total_jiffies_now, work_jiffies_now, work_over_period, total_over_period;
+	long total_jiffies_now, work_jiffies_now;
+	long work_over_period, total_over_period;
 	float cpu;
 	
 	total_jiffies_now = get_total_jiffies();
@@ -96,7 +97,7 @@ char *get_net(char *buf)
 	struct wireless_info *winfo;
 	
 	if(is_up(WIRED_DEVICE)) {
-		strcpy(buf, "On");
+		strcpy(buf, "\x01 Eth\x02On");
 		return buf;
 	}
 	else if(is_up(WIRELESS_DEVICE)) {
@@ -106,12 +107,13 @@ char *get_net(char *buf)
 		skfd = iw_sockets_open();
 		if (iw_get_basic_config(skfd, WIRELESS_DEVICE, &(winfo->b)) > -1) {
 			if (winfo->b.has_essid && winfo->b.essid_on) {
-				strcpy(buf, winfo->b.essid);
+				sprintf(buf, "\x01%s\x02%d", winfo->b.essid,
+					(winfo->stats.qual.qual * 100) / winfo->range.max_qual.qual);
 				return buf;
 			}
 		}
 	}
-	strcpy(buf, "No");
+	strcpy(buf, "\x01 Eth\x02No");
 	return buf;
 }
 
@@ -170,7 +172,7 @@ int main(void)
 {
 	Display *dpy;
 	Window root;
-	char status[200], time[30], net[20], mpd[100], vol[4];
+	char status[256], time[32], net[32], mpd[128], vol[4];
 	long total_jiffies, work_jiffies;
 	float cpu, mem;
 
@@ -192,7 +194,7 @@ int main(void)
 		get_mpd(mpd);
 		get_vol(vol);
 
-		sprintf(status, "\x01%s\x01 Cpu\x02%.2f \x01Mem\x02%.2f \x01Net\x02%s \x01Vol\x02%s \x02%s",
+		sprintf(status, "\x01%s\x01 Cpu\x02%.2f \x01Mem\x02%.2f%s \x01Vol\x02%s %s",
 			mpd, cpu, mem, net, vol, time);
 
 		total_jiffies = get_total_jiffies();
