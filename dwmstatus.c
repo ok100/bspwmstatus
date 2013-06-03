@@ -109,9 +109,11 @@ char *get_net(char *buf)
 			if (winfo->b.has_essid && winfo->b.essid_on) {
 				sprintf(buf, "\x01%s\x02%d", winfo->b.essid,
 					(winfo->stats.qual.qual * 100) / winfo->range.max_qual.qual);
+				free(winfo);
 				return buf;
 			}
 		}
+		free(winfo);
 	}
 	strcpy(buf, "\x01 Eth\x02No");
 	return buf;
