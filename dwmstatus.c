@@ -98,24 +98,28 @@ char *get_net(char *buf)
 	
 	if(is_up(WIRED_DEVICE)) {
 		strcpy(buf, "\x01 Eth\x02On");
-		return buf;
 	}
 	else if(is_up(WIRELESS_DEVICE)) {
 		winfo = malloc(sizeof(struct wireless_info));
 		memset(winfo, 0, sizeof(struct wireless_info));
-
 		skfd = iw_sockets_open();
 		if (iw_get_basic_config(skfd, WIRELESS_DEVICE, &(winfo->b)) > -1) {
+			if (iw_get_stats(skfd, WIRELESS_DEVICE, &(winfo->stats),
+					&winfo->range, winfo->has_range) >= 0)
+				winfo->has_stats = 1;
+			if (iw_get_range_info(skfd, WIRELESS_DEVICE, &(winfo->range)) >= 0)
+				winfo->has_range = 1;
 			if (winfo->b.has_essid && winfo->b.essid_on) {
-				sprintf(buf, "\x01%s\x02%d", winfo->b.essid,
+				winfo->b.essid[0] = toupper(winfo->b.essid[0]);
+				sprintf(buf, "\x01 %s\x02%d", winfo->b.essid,
 					(winfo->stats.qual.qual * 100) / winfo->range.max_qual.qual);
-				free(winfo);
-				return buf;
 			}
 		}
 		free(winfo);
 	}
-	strcpy(buf, "\x01 Eth\x02No");
+	else {
+		strcpy(buf, "\x01 Eth\x02No");
+	}
 	return buf;
 }
 
