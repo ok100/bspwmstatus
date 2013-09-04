@@ -8,8 +8,11 @@
 
 #define UPDATE_INTERVAL 2
 #define CLOCK_FORMAT "\x01%a\x02%d\x01%b\x02%H:%M"
-#define WIRED_DEVICE "enp4s0"
+#define WIRED_DEVICE "enp3s0"
 #define WIRELESS_DEVICE "wlan0"
+#define BATTERY_FULL "/sys/class/power_supply/BAT0/energy_full"
+#define BATTERY_NOW "/sys/class/power_supply/BAT0/energy_now"
+#define ON_AC "/sys/class/power_supply/ADP1/online"
 
 char *get_time(char *buf, int bufsize, char *format)
 {
@@ -31,6 +34,28 @@ float get_mem(void)
 	fclose(f);
 	mem = (total - free - buffers - cached) / total;
 	return mem;
+}
+
+char *get_bat(char *buf)
+{
+	FILE *f;
+	float now, full;
+	int ac;
+
+	f = fopen(BATTERY_NOW, "r");
+	fscanf(f, "%f", &now);
+	fclose(f);
+	f = fopen(BATTERY_FULL, "r");
+	fscanf(f, "%f", &full);
+	fclose(f);
+	f = fopen(ON_AC, "r");
+	fscanf(f, "%d", &ac);
+	fclose(f);
+	if(ac)
+		sprintf(buf, "\x01 Ac\x02%.2f", now / full);
+	else
+		sprintf(buf, "\x01 Bat\x02%.2f", now / full);
+	return buf;
 }
 
 long get_total_jiffies()
@@ -178,7 +203,7 @@ int main(void)
 {
 	Display *dpy;
 	Window root;
-	char status[256], time[32], net[32], mpd[128], vol[4];
+	char status[256], time[32], net[32], mpd[128], vol[4], bat[12];
 	long total_jiffies, work_jiffies;
 	float cpu, mem;
 
@@ -195,13 +220,14 @@ int main(void)
 	while(1) {
 		cpu = get_cpu(total_jiffies, work_jiffies);
 		mem = get_mem();
+		get_bat(bat);
 		get_net(net);
 		get_time(time, sizeof(time), CLOCK_FORMAT);
 		get_mpd(mpd);
 		get_vol(vol);
 
-		sprintf(status, "\x01%s\x01 Cpu\x02%.2f \x01Mem\x02%.2f%s \x01Vol\x02%s %s",
-			mpd, cpu, mem, net, vol, time);
+		sprintf(status, "\x01%s\x01 Cpu\x02%.2f \x01Mem\x02%.2f%s%s \x01Vol\x02%s %s",
+			mpd, cpu, mem, bat, net, vol, time);
 
 		total_jiffies = get_total_jiffies();
 		work_jiffies = get_work_jiffies();
