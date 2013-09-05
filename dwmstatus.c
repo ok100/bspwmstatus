@@ -13,6 +13,7 @@
 #define BATTERY_FULL "/sys/class/power_supply/BAT0/energy_full"
 #define BATTERY_NOW "/sys/class/power_supply/BAT0/energy_now"
 #define ON_AC "/sys/class/power_supply/ADP1/online"
+#define TEMP "/sys/class/thermal/thermal_zone0/temp"
 
 char *get_time(char *buf, int bufsize, char *format)
 {
@@ -98,6 +99,17 @@ float get_cpu(long total_jiffies, long work_jiffies)
 	else
 		cpu = 0.0;
 	return cpu;
+}
+
+int get_temp()
+{
+	FILE *f;
+	int temp;
+
+	f = fopen(TEMP, "r");
+	fscanf(f, "%d", &temp);
+	fclose(f);
+	return temp / 1000;
 }
 
 int is_up(char *device)
@@ -206,6 +218,7 @@ int main(void)
 	char status[256], time[32], net[32], mpd[128], vol[4], bat[12];
 	long total_jiffies, work_jiffies;
 	float cpu, mem;
+	int temp;
 
 	dpy = XOpenDisplay(NULL);
 	if(dpy == NULL) {
@@ -219,6 +232,7 @@ int main(void)
 	
 	while(1) {
 		cpu = get_cpu(total_jiffies, work_jiffies);
+		temp = get_temp();
 		mem = get_mem();
 		get_bat(bat);
 		get_net(net);
@@ -226,8 +240,8 @@ int main(void)
 		get_mpd(mpd);
 		get_vol(vol);
 
-		sprintf(status, "\x01%s\x01 Cpu\x02%.2f \x01Mem\x02%.2f%s%s \x01Vol\x02%s %s",
-			mpd, cpu, mem, bat, net, vol, time);
+		sprintf(status, "\x01%s\x01 Cpu\x02%.2f\x01 Tmp\x02%d \x01Mem\x02%.2f%s%s \x01Vol\x02%s %s",
+			mpd, cpu, temp, mem, bat, net, vol, time);
 
 		total_jiffies = get_total_jiffies();
 		work_jiffies = get_work_jiffies();
