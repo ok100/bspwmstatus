@@ -9,7 +9,7 @@
 #define UPDATE_INTERVAL 2
 #define CLOCK_FORMAT "\x01%a\x02%d\x01%b\x02%H:%M"
 #define WIRED_DEVICE "enp3s0"
-#define WIRELESS_DEVICE "wlan0"
+#define WIRELESS_DEVICE "wlp2s0"
 #define BATTERY_FULL "/sys/class/power_supply/BAT0/energy_full"
 #define BATTERY_NOW "/sys/class/power_supply/BAT0/energy_now"
 #define ON_AC "/sys/class/power_supply/ADP1/online"
@@ -240,8 +240,8 @@ int main(void)
 		get_mpd(mpd);
 		get_vol(vol);
 
-		sprintf(status, "\x01%s\x01 Cpu\x02%.2f\x01 Tmp\x02%d \x01Mem\x02%.2f%s%s \x01Vol\x02%s %s",
-			mpd, cpu, temp, mem, bat, net, vol, time);
+		sprintf(status, "\x01%s\x01 Cpu\x02%.2f\x01 Mem\x02%.2f%s%s\x01 Tmp\x02%d \x01Vol\x02%s %s",
+			mpd, cpu, mem, bat, net, temp, vol, time);
 
 		total_jiffies = get_total_jiffies();
 		work_jiffies = get_work_jiffies();
