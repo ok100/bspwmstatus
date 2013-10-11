@@ -24,17 +24,22 @@ char *get_time(char *buf, int bufsize, char *format)
 	return buf;
 }
 
-float get_mem(void)
+char *get_mem(char *buf)
 {
 	FILE *f;
 	float total, free, buffers, cached, mem;
 
-	f = fopen("/proc/meminfo", "r");
-	fscanf(f, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
-		&total, &free, &buffers, &cached);
-	fclose(f);
-	mem = (total - free - buffers - cached) / total;
-	return mem;
+	if((f = fopen("/proc/meminfo", "r")) != NULL) {
+		fscanf(f, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
+			&total, &free, &buffers, &cached);
+		fclose(f);
+		mem = (total - free - buffers - cached) / total;
+	}
+	else {
+		mem = 0.;
+	}
+	sprintf(buf, "%cMem\x02%.2f", '\x01', mem);
+	return buf;
 }
 
 char *get_bat(char *buf)
@@ -43,19 +48,31 @@ char *get_bat(char *buf)
 	float now, full;
 	int ac;
 
-	f = fopen(BATTERY_NOW, "r");
-	fscanf(f, "%f", &now);
-	fclose(f);
-	f = fopen(BATTERY_FULL, "r");
-	fscanf(f, "%f", &full);
-	fclose(f);
-	f = fopen(ON_AC, "r");
-	fscanf(f, "%d", &ac);
-	fclose(f);
+	if((f = fopen(BATTERY_NOW, "r")) != NULL) {
+		fscanf(f, "%f", &now);
+		fclose(f);
+	}
+	else {
+		now = 0.;
+	}
+	if((f = fopen(BATTERY_FULL, "r")) != NULL) {
+		fscanf(f, "%f", &full);
+		fclose(f);
+	}
+	else {
+		full = 0.;
+	}
+	if((f = fopen(ON_AC, "r")) != NULL) {
+		fscanf(f, "%d", &ac);
+		fclose(f);
+	}
+	else {
+		ac = 0;
+	}
 	if(ac)
-		sprintf(buf, "\x01 Ac\x02%.2f", now / full);
+		sprintf(buf, "%cAc\x02%.2f", '\x01', now / full);
 	else
-		sprintf(buf, "\x01 Bat\x02%.2f", now / full);
+		sprintf(buf, "%cBat\x02%.2f", '\x01', now / full);
 	return buf;
 }
 
@@ -64,11 +81,15 @@ long get_total_jiffies()
 	FILE *f;
 	long j[7], total;
 
-	f = fopen("/proc/stat", "r");
-	fscanf(f, "cpu %ld %ld %ld %ld %ld %ld %ld",
-		&j[0], &j[1], &j[2], &j[3], &j[4], &j[5], &j[6]);
-	fclose(f);
-	total = j[0] + j[1] + j[2] + j[3] + j[4] + j[5] + j[6];
+	if((f = fopen("/proc/stat", "r")) != NULL) {
+		fscanf(f, "cpu %ld %ld %ld %ld %ld %ld %ld",
+			&j[0], &j[1], &j[2], &j[3], &j[4], &j[5], &j[6]);
+		total = j[0] + j[1] + j[2] + j[3] + j[4] + j[5] + j[6];
+		fclose(f);
+	}
+	else {
+		total = 0;
+	}
 	return total;
 }
 
@@ -77,14 +98,18 @@ long get_work_jiffies()
 	FILE *f;
 	long j[3], work;
 
-	f = fopen("/proc/stat", "r");
-	fscanf(f, "cpu %ld %ld %ld", &j[0], &j[1], &j[2]);
-	fclose(f);
-	work = j[0] + j[1] + j[2];
+	if((f = fopen("/proc/stat", "r")) != NULL) {
+		fscanf(f, "cpu %ld %ld %ld", &j[0], &j[1], &j[2]);
+		work = j[0] + j[1] + j[2];
+		fclose(f);
+	}
+	else {
+		work = 0;
+	}
 	return work;
 }
 
-float get_cpu(long total_jiffies, long work_jiffies)
+char *get_cpu(char *buf, long total_jiffies, long work_jiffies)
 {
 	long total_jiffies_now, work_jiffies_now;
 	long work_over_period, total_over_period;
@@ -98,18 +123,8 @@ float get_cpu(long total_jiffies, long work_jiffies)
 		cpu = ((float)work_over_period / (float)total_over_period);
 	else
 		cpu = 0.0;
-	return cpu;
-}
-
-int get_temp()
-{
-	FILE *f;
-	int temp;
-
-	f = fopen(TEMP, "r");
-	fscanf(f, "%d", &temp);
-	fclose(f);
-	return temp / 1000;
+	sprintf(buf, "%cCpu\x02%.2f", '\x01', cpu);
+	return buf;
 }
 
 int is_up(char *device)
@@ -118,8 +133,7 @@ int is_up(char *device)
 	char fn[50], state[5];
 
 	sprintf(fn, "/sys/class/net/%s/operstate", device);
-	f = fopen(fn, "r");
-	if(f != NULL) {
+	if((f = fopen(fn, "r")) != NULL) {
 		fscanf(f, "%s", state);
 		fclose(f);
 		if(strcmp(state, "up") == 0)
@@ -134,7 +148,7 @@ char *get_net(char *buf)
 	struct wireless_info *winfo;
 	
 	if(is_up(WIRED_DEVICE)) {
-		strcpy(buf, "\x01 Eth\x02On");
+		sprintf(buf, "%cEth\x02On", '\x01');
 	}
 	else if(is_up(WIRELESS_DEVICE)) {
 		winfo = malloc(sizeof(struct wireless_info));
@@ -148,14 +162,14 @@ char *get_net(char *buf)
 				winfo->has_range = 1;
 			if (winfo->b.has_essid && winfo->b.essid_on) {
 				winfo->b.essid[0] = toupper(winfo->b.essid[0]);
-				sprintf(buf, "\x01 %s\x02%d", winfo->b.essid,
+				sprintf(buf, "%c%s\x02%d", '\x01', winfo->b.essid,
 					(winfo->stats.qual.qual * 100) / winfo->range.max_qual.qual);
 			}
 		}
 		free(winfo);
 	}
 	else {
-		strcpy(buf, "\x01 Eth\x02No");
+		sprintf(buf, "%cEth\x02No", '\x01');
 	}
 	return buf;
 }
@@ -183,7 +197,7 @@ char *get_mpd(char *buf)
 			song = mpd_recv_song(conn);
 			artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
 			title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
-			sprintf(buf, "%s\x02%s", artist, title);
+			sprintf(buf, "\x01%s\x02%s", artist, title);
 			mpd_song_free(song);
 		}
 		else {
@@ -199,15 +213,16 @@ char *get_vol(char *buf)
 {
 	FILE *f;
 	char fn[50];
+	char vol[4];
 	
 	sprintf(fn, "%s/.volume", getenv("HOME"));
-	f = fopen(fn, "r");
-	if(f == NULL) {
+	if((f = fopen(fn, "r")) == NULL) {
 		sprintf(buf, "N/A");
 		return buf;
 	}
-	fscanf(f, "%s", buf);
+	fscanf(f, "%s", vol);
 	fclose(f);
+	sprintf(buf, "\x01Vol\x02%s", vol);
 	return buf;
 }
 
@@ -215,13 +230,10 @@ int main(void)
 {
 	Display *dpy;
 	Window root;
-	char status[256], time[32], net[32], mpd[128], vol[4], bat[12];
+	char status[512], time[32], net[64], mpd[128], vol[16], bat[16], cpu[16], mem[16];
 	long total_jiffies, work_jiffies;
-	float cpu, mem;
-	int temp;
 
-	dpy = XOpenDisplay(NULL);
-	if(dpy == NULL) {
+	if((dpy = XOpenDisplay(NULL)) == NULL) {
 		fprintf(stderr, "error: could not open display\n");
 		return 1;
 	}
@@ -231,17 +243,15 @@ int main(void)
 	work_jiffies = get_work_jiffies();
 	
 	while(1) {
-		cpu = get_cpu(total_jiffies, work_jiffies);
-		temp = get_temp();
-		mem = get_mem();
+		get_cpu(cpu, total_jiffies, work_jiffies);
+		get_mem(mem);
 		get_bat(bat);
 		get_net(net);
 		get_time(time, sizeof(time), CLOCK_FORMAT);
 		get_mpd(mpd);
 		get_vol(vol);
 
-		sprintf(status, "\x01%s\x01 Cpu\x02%.2f\x01 Mem\x02%.2f%s%s\x01 Tmp\x02%d \x01Vol\x02%s %s",
-			mpd, cpu, mem, bat, net, temp, vol, time);
+		sprintf(status, "%s %s %s %s %s %s %s", mpd, cpu, mem, bat, net, vol, time);
 
 		total_jiffies = get_total_jiffies();
 		work_jiffies = get_work_jiffies();
