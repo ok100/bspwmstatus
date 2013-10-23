@@ -37,7 +37,7 @@ char *get_mem(char *buf)
 		mem = (total - free - buffers - cached) / total;
 	} else
 		mem = 0.;
-	sprintf(buf, "%cMem\x02%.2f", '\x01', mem);
+	snprintf(buf, 10, "%cMem\x02%.2f", '\x01', mem);
 	return buf;
 }
 
@@ -69,9 +69,9 @@ char *get_bat(char *buf)
 		ac = 0;
 
 	if(ac)
-		sprintf(buf, "%cAc\x02%.2f", '\x01', now / full);
+		snprintf(buf, 9, "%cAc\x02%.2f", '\x01', now / full);
 	else
-		sprintf(buf, "%cBat\x02%.2f", '\x01', now / full);
+		snprintf(buf, 10, "%cBat\x02%.2f", '\x01', now / full);
 	return buf;
 }
 
@@ -118,7 +118,7 @@ char *get_cpu(char *buf, long total_jiffies, long work_jiffies)
 		cpu = (float)work_over_period / (float)total_over_period;
 	else
 		cpu = 0.;
-	sprintf(buf, "%cCpu\x02%.2f", '\x01', cpu);
+	snprintf(buf, 10, "%cCpu\x02%.2f", '\x01', cpu);
 	return buf;
 }
 
@@ -177,7 +177,7 @@ char *get_mpd(char *buf)
 
 	conn = mpd_connection_new(NULL, 0, 30000);
 	if(mpd_connection_get_error(conn))
-		strcpy(buf, "");
+		buf[0] = '\0';
 	else {
 	 	mpd_command_list_begin(conn, true);
 		mpd_send_status(conn);
@@ -210,7 +210,7 @@ char *get_vol(char *buf)
 	fp = fopen(fn, "r");
 	free(fn);
 	if(fp == NULL) {
-		sprintf(buf, "\x01Vol\x02N/A");
+		snprintf(buf, 9, "\x01Vol\x02N/A");
 		return buf;
 	}
 	fscanf(fp, "%s", vol);
