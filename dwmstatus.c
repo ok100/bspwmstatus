@@ -106,14 +106,11 @@ long get_work_jiffies(void)
 
 char *get_cpu(char *buf, long total_jiffies, long work_jiffies)
 {
-	long total_jiffies_now, work_jiffies_now;
 	long work_over_period, total_over_period;
 	float cpu;
 	
-	total_jiffies_now = get_total_jiffies();
-	work_jiffies_now = get_work_jiffies();
-	work_over_period = work_jiffies_now - work_jiffies;
-	total_over_period = total_jiffies_now - total_jiffies;
+	work_over_period = get_work_jiffies() - work_jiffies;
+	total_over_period = get_total_jiffies() - total_jiffies;
 	if(total_over_period > 0)
 		cpu = (float)work_over_period / (float)total_over_period;
 	else
@@ -141,6 +138,7 @@ int is_up(char *device)
 char *get_net(char *buf)
 {
 	int skfd;
+	char essid[58];
 	struct wireless_info *winfo;
 	
 	if(is_up(WIRED_DEVICE))
@@ -156,8 +154,9 @@ char *get_net(char *buf)
 			if (iw_get_range_info(skfd, WIRELESS_DEVICE, &(winfo->range)) >= 0)
 				winfo->has_range = 1;
 			if (winfo->b.has_essid && winfo->b.essid_on) {
-				winfo->b.essid[0] = toupper(winfo->b.essid[0]);
-				snprintf(buf, 64, "%c%s\x02%d", '\x01', winfo->b.essid,
+				strncpy(essid, winfo->b.essid, sizeof(essid));
+				essid[0] = toupper(essid[0]);
+				snprintf(buf, 64, "%c%s\x02%d", '\x01', essid,
 					(winfo->stats.qual.qual * 100) / winfo->range.max_qual.qual);
 			}
 		}
