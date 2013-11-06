@@ -1,8 +1,12 @@
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <iwlib.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <linux/wireless.h>
 #include <mpd/client.h>
 #include <X11/Xlib.h>
 
@@ -15,64 +19,55 @@
 #define ON_AC           "/sys/class/power_supply/ADP1/online"
 #define VOLUME          "/home/ok/.volume"
 
-char *get_time(char *buf, int bufsize)
+void get_time(char *buf, int bufsize)
 {
 	time_t tm;
 
 	time(&tm);
 	strftime(buf, bufsize, CLOCK_FORMAT, localtime(&tm));
-	return buf;
 }
 
-char *get_mem(char *buf)
+void get_mem(char *buf, int bufsize)
 {
 	FILE *fp;
-	float total, free, buffers, cached, mem;
+	float total, free, buffers, cached;
 
 	fp = fopen("/proc/meminfo", "r");
 	if(fp != NULL) {
 		fscanf(fp, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
 			&total, &free, &buffers, &cached);
+		snprintf(buf, bufsize, "%cMem\x02%.2f", '\x01', (total - free - buffers - cached) / total);
 		fclose(fp);
-		mem = (total - free - buffers - cached) / total;
 	} else
-		mem = 0.;
-	snprintf(buf, 10, "%cMem\x02%.2f", '\x01', mem);
-	return buf;
+		snprintf(buf, bufsize, "%cMem\x02N/A", '\x01');
 }
 
-char *get_bat(char *buf)
+void get_bat(char *buf, int bufsize)
 {
-	FILE *fp;
+	FILE *f1p, *f2p, *f3p;
 	float now, full;
 	int ac;
 
-	fp = fopen(BATTERY_NOW, "r");
-	if(fp != NULL) {
-		fscanf(fp, "%f", &now);
-		fclose(fp);
-	} else
-		now = 0.;
-
-	fp = fopen(BATTERY_FULL, "r");
-	if(fp != NULL) {
-		fscanf(fp, "%f", &full);
-		fclose(fp);
-	} else
-		full = 1.;
-
-	fp = fopen(ON_AC, "r");
-	if(fp != NULL) {
-		fscanf(fp, "%d", &ac);
-		fclose(fp);
-	} else
-		ac = 0;
-
-	if(ac)
-		snprintf(buf, 9, "%cAc\x02%.2f", '\x01', now / full);
-	else
-		snprintf(buf, 10, "%cBat\x02%.2f", '\x01', now / full);
-	return buf;
+	f1p = fopen(BATTERY_NOW, "r");
+	f2p = fopen(BATTERY_FULL, "r");
+	f3p = fopen(ON_AC, "r");
+	if(f1p == NULL || f2p == NULL || f3p == NULL)
+		snprintf(buf, bufsize, "%cBat\x02N/A", '\x01');
+	else {
+		fscanf(f1p, "%f", &now);
+		fscanf(f2p, "%f", &full);
+		fscanf(f3p, "%d", &ac);
+		if(ac)
+			snprintf(buf, bufsize, "%cAc\x02%.2f", '\x01', now / full);
+		else
+			snprintf(buf, bufsize, "%cBat\x02%.2f", '\x01', now / full);
+	}
+	if(f1p != NULL)
+		fclose(f1p);
+	if(f2p != NULL)
+		fclose(f2p);
+	if(f3p != NULL)
+		fclose(f3p);
 }
 
 long get_jiffies(int n)
@@ -84,7 +79,6 @@ long get_jiffies(int n)
 	fp = fopen("/proc/stat", "r");
 	if(fp == NULL)
 		return 0;
-	
 	fscanf(fp, "cpu %ld", &jiffies);
 	for(i = 0; i < n - 1; i++) {
 		fscanf(fp, "%ld", &j);
@@ -104,7 +98,7 @@ long get_work_jiffies(void)
 	return get_jiffies(3);
 }
 
-char *get_cpu(char *buf, long total_jiffies, long work_jiffies)
+void get_cpu(char *buf, int bufsize, long total_jiffies, long work_jiffies)
 {
 	long work_over_period, total_over_period;
 	float cpu;
@@ -115,8 +109,7 @@ char *get_cpu(char *buf, long total_jiffies, long work_jiffies)
 		cpu = (float)work_over_period / (float)total_over_period;
 	else
 		cpu = 0.;
-	snprintf(buf, 10, "%cCpu\x02%.2f", '\x01', cpu);
-	return buf;
+	snprintf(buf, bufsize, "%cCpu\x02%.2f", '\x01', cpu);
 }
 
 int is_up(char *device)
@@ -135,41 +128,40 @@ int is_up(char *device)
 	return 0;
 }
 
-char *get_net(char *buf)
+void get_net(char *buf, int bufsize)
 {
-	int skfd;
-	char essid[58];
-	struct wireless_info *winfo;
+	int sockfd, qual = 0;
+	char ssid[IW_ESSID_MAX_SIZE + 1] = "N/A";
+	struct iwreq wreq;
+	struct iw_statistics stats;
 	
 	if(is_up(WIRED_DEVICE))
-		snprintf(buf, 8, "%cEth\x02On", '\x01');
+		snprintf(buf, bufsize, "%cEth\x02On", '\x01');
 	else if(is_up(WIRELESS_DEVICE)) {
-		winfo = malloc(sizeof(struct wireless_info));
-		memset(winfo, 0, sizeof(struct wireless_info));
-		skfd = iw_sockets_open();
-		if (iw_get_basic_config(skfd, WIRELESS_DEVICE, &(winfo->b)) > -1) {
-			if (iw_get_stats(skfd, WIRELESS_DEVICE, &(winfo->stats),
-					&winfo->range, winfo->has_range) >= 0)
-				winfo->has_stats = 1;
-			if (iw_get_range_info(skfd, WIRELESS_DEVICE, &(winfo->range)) >= 0)
-				winfo->has_range = 1;
-			if (winfo->b.has_essid && winfo->b.essid_on) {
-				strncpy(essid, winfo->b.essid, sizeof(essid));
-				essid[0] = toupper(essid[0]);
-				snprintf(buf, 64, "%c%s\x02%d", '\x01', essid,
-					(winfo->stats.qual.qual * 100) / winfo->range.max_qual.qual);
-			}
+		memset(&wreq, 0, sizeof(struct iwreq));
+		sprintf(wreq.ifr_name, WIRELESS_DEVICE);
+		sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+		if(sockfd != -1) {
+			wreq.u.essid.pointer = ssid;
+			wreq.u.essid.length = sizeof(ssid);
+			if(!ioctl(sockfd, SIOCGIWESSID, &wreq))
+				ssid[0] = toupper(ssid[0]);
+
+			wreq.u.data.pointer = (caddr_t) &stats;
+			wreq.u.data.length = sizeof(struct iw_statistics);
+			wreq.u.data.flags = 1;
+			if(!ioctl(sockfd, SIOCGIWSTATS, &wreq))
+				qual = stats.qual.qual;
 		}
-		free(winfo);
+		snprintf(buf, bufsize, "%c%s\x02%d", '\x01', ssid, qual);
+		close(sockfd);
 	} else
-		snprintf(buf, 8, "%cEth\x02No", '\x01');
-	return buf;
+		snprintf(buf, bufsize, "%cEth\x02No", '\x01');
 }
 
-char *get_mpd(char *buf)
+void get_mpd(char *buf, int bufsize)
 {
-	const char *artist = NULL;
-	const char *title = NULL;
+	const char *artist = NULL, *title = NULL;
 	struct mpd_connection *conn;
 	struct mpd_status *status;
 	struct mpd_song *song;
@@ -188,34 +180,28 @@ char *get_mpd(char *buf)
 			song = mpd_recv_song(conn);
 			artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
 			title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
-			snprintf(buf, 128, "\x01%s\x02%s", artist, title);
+			snprintf(buf, bufsize, "\x01%s\x02%s", artist, title);
 			mpd_song_free(song);
 		} else
 			buf[0] = '\0';
 		mpd_response_finish(conn);
 	}
 	mpd_connection_free(conn);
-	return buf;
 }
 
-char *get_vol(char *buf)
+void get_vol(char *buf, int bufsize)
 {
 	FILE *fp;
-	char *fn;
 	char vol[4];
 	
-	fn = malloc(sizeof(VOLUME));
-	snprintf(fn, sizeof(VOLUME), VOLUME);
-	fp = fopen(fn, "r");
-	free(fn);
-	if(fp == NULL) {
-		snprintf(buf, 9, "\x01Vol\x02N/A");
-		return buf;
+	fp = fopen(VOLUME, "r");
+	if(fp == NULL)
+		snprintf(buf, bufsize, "\x01Vol\x02N/A");
+	else {
+		fscanf(fp, "%s", vol);
+		fclose(fp);
+		snprintf(buf, bufsize, "\x01Vol\x02%s", vol);
 	}
-	fscanf(fp, "%s", vol);
-	fclose(fp);
-	snprintf(buf, 9, "\x01Vol\x02%s", vol);
-	return buf;
 }
 
 int main(void)
@@ -236,13 +222,13 @@ int main(void)
 	work_jiffies = get_work_jiffies();
 	
 	while(1) {
-		get_cpu(cpu, total_jiffies, work_jiffies);
-		get_mem(mem);
-		get_bat(bat);
-		get_net(net);
+		get_cpu(cpu, sizeof(cpu), total_jiffies, work_jiffies);
+		get_mem(mem, sizeof(mem));
+		get_bat(bat, sizeof(bat));
+		get_net(net, sizeof(net));
 		get_time(time, sizeof(time));
-		get_mpd(mpd);
-		get_vol(vol);
+		get_mpd(mpd, sizeof(mpd));
+		get_vol(vol, sizeof(vol));
 
 		snprintf(status, sizeof(status), "%s %s %s %s %s %s %s", mpd, cpu, mem, bat, net, vol, time);
 
