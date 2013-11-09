@@ -19,6 +19,9 @@
 #define ON_AC           "/sys/class/power_supply/ADP1/online"
 #define VOLUME          "/home/ok/.volume"
 
+#define TOTAL_JIFFIES get_jiffies(7)
+#define WORK_JIFFIES get_jiffies(3)
+
 void get_time(char *buf, int bufsize)
 {
 	time_t tm;
@@ -88,23 +91,13 @@ long get_jiffies(int n)
 	return jiffies;
 }
 
-long get_total_jiffies(void)
-{
-	return get_jiffies(7);
-}
-
-long get_work_jiffies(void)
-{
-	return get_jiffies(3);
-}
-
 void get_cpu(char *buf, int bufsize, long total_jiffies, long work_jiffies)
 {
 	long work_over_period, total_over_period;
 	float cpu;
 	
-	work_over_period = get_work_jiffies() - work_jiffies;
-	total_over_period = get_total_jiffies() - total_jiffies;
+	work_over_period = WORK_JIFFIES - work_jiffies;
+	total_over_period = TOTAL_JIFFIES - total_jiffies;
 	if(total_over_period > 0)
 		cpu = (float)work_over_period / (float)total_over_period;
 	else
@@ -218,8 +211,8 @@ int main(void)
 	}
 	root = XRootWindow(dpy, DefaultScreen(dpy));
 
-	total_jiffies = get_total_jiffies();
-	work_jiffies = get_work_jiffies();
+	total_jiffies = TOTAL_JIFFIES;
+	work_jiffies = WORK_JIFFIES;
 	
 	while(1) {
 		get_cpu(cpu, sizeof(cpu), total_jiffies, work_jiffies);
@@ -232,8 +225,8 @@ int main(void)
 
 		snprintf(status, sizeof(status), "%s %s %s %s %s %s %s", mpd, cpu, mem, bat, net, vol, time);
 
-		total_jiffies = get_total_jiffies();
-		work_jiffies = get_work_jiffies();
+		total_jiffies = TOTAL_JIFFIES;
+		work_jiffies = WORK_JIFFIES;
 
 		XStoreName(dpy, root, status);
 		XFlush(dpy);
