@@ -8,10 +8,11 @@
 #include <sys/socket.h>
 #include <linux/wireless.h>
 #include <mpd/client.h>
-#include <X11/Xlib.h>
 
+#define COLOR1          "^fg(#6B5A4B)"
+#define COLOR2          "^fg(#9A875F)"
 #define UPDATE_INTERVAL 2
-#define CLOCK_FORMAT    "\x01%a\x02%d\x01%b\x02%H:%M"
+#define CLOCK_FORMAT    "^fg(#6B5A4B)%a ^fg(#9A875F)%d ^fg(#6B5A4B)%b ^fg(#9A875F)%H:%M"
 #define WIRED_DEVICE    "enp3s0"
 #define WIRELESS_DEVICE "wlp2s0"
 #define BATTERY_FULL    "/sys/class/power_supply/BAT0/energy_full"
@@ -22,7 +23,7 @@
 #define TOTAL_JIFFIES get_jiffies(7)
 #define WORK_JIFFIES get_jiffies(3)
 
-void get_time(char *buf, int bufsize)
+void get_time(char *buf, size_t bufsize)
 {
 	time_t tm;
 
@@ -30,7 +31,7 @@ void get_time(char *buf, int bufsize)
 	strftime(buf, bufsize, CLOCK_FORMAT, localtime(&tm));
 }
 
-void get_mem(char *buf, int bufsize)
+void get_mem(char *buf, size_t bufsize)
 {
 	FILE *fp;
 	float total, free, buffers, cached;
@@ -39,13 +40,13 @@ void get_mem(char *buf, int bufsize)
 	if(fp != NULL) {
 		fscanf(fp, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
 			&total, &free, &buffers, &cached);
-		snprintf(buf, bufsize, "%cMem\x02%.2f", '\x01', (total - free - buffers - cached) / total);
+		snprintf(buf, bufsize, "%sMem %s%.2f", COLOR1, COLOR2, (total - free - buffers - cached) / total);
 		fclose(fp);
 	} else
-		snprintf(buf, bufsize, "%cMem\x02N/A", '\x01');
+		snprintf(buf, bufsize, "%sMem %sN/A", COLOR1, COLOR2);
 }
 
-void get_bat(char *buf, int bufsize)
+void get_bat(char *buf, size_t bufsize)
 {
 	FILE *f1p, *f2p, *f3p;
 	float now, full;
@@ -55,15 +56,15 @@ void get_bat(char *buf, int bufsize)
 	f2p = fopen(BATTERY_FULL, "r");
 	f3p = fopen(ON_AC, "r");
 	if(f1p == NULL || f2p == NULL || f3p == NULL)
-		snprintf(buf, bufsize, "%cBat\x02N/A", '\x01');
+		snprintf(buf, bufsize, "%sBat %sN/A", COLOR1, COLOR2);
 	else {
 		fscanf(f1p, "%f", &now);
 		fscanf(f2p, "%f", &full);
 		fscanf(f3p, "%d", &ac);
 		if(ac)
-			snprintf(buf, bufsize, "%cAc\x02%.2f", '\x01', now / full);
+			snprintf(buf, bufsize, "%sAc %s%.2f", COLOR1, COLOR2, now / full);
 		else
-			snprintf(buf, bufsize, "%cBat\x02%.2f", '\x01', now / full);
+			snprintf(buf, bufsize, "%sBat %s%.2f", COLOR1, COLOR2, now / full);
 	}
 	if(f1p != NULL)
 		fclose(f1p);
@@ -91,7 +92,7 @@ long get_jiffies(int n)
 	return jiffies;
 }
 
-void get_cpu(char *buf, int bufsize, long total_jiffies, long work_jiffies)
+void get_cpu(char *buf, size_t bufsize, long total_jiffies, long work_jiffies)
 {
 	long work_over_period, total_over_period;
 	float cpu;
@@ -102,7 +103,7 @@ void get_cpu(char *buf, int bufsize, long total_jiffies, long work_jiffies)
 		cpu = (float)work_over_period / (float)total_over_period;
 	else
 		cpu = 0.;
-	snprintf(buf, bufsize, "%cCpu\x02%.2f", '\x01', cpu);
+	snprintf(buf, bufsize, "%sCpu %s%.2f", COLOR1, COLOR2, cpu);
 }
 
 int is_up(char *device)
@@ -121,7 +122,7 @@ int is_up(char *device)
 	return 0;
 }
 
-void get_net(char *buf, int bufsize)
+void get_net(char *buf, size_t bufsize)
 {
 	int sockfd, qual = 0;
 	char ssid[IW_ESSID_MAX_SIZE + 1] = "N/A";
@@ -129,7 +130,7 @@ void get_net(char *buf, int bufsize)
 	struct iw_statistics stats;
 	
 	if(is_up(WIRED_DEVICE))
-		snprintf(buf, bufsize, "%cEth\x02On", '\x01');
+		snprintf(buf, bufsize, "%sEth %sOn", COLOR1, COLOR2);
 	else if(is_up(WIRELESS_DEVICE)) {
 		memset(&wreq, 0, sizeof(struct iwreq));
 		sprintf(wreq.ifr_name, WIRELESS_DEVICE);
@@ -146,13 +147,13 @@ void get_net(char *buf, int bufsize)
 			if(!ioctl(sockfd, SIOCGIWSTATS, &wreq))
 				qual = stats.qual.qual;
 		}
-		snprintf(buf, bufsize, "%c%s\x02%d", '\x01', ssid, qual);
+		snprintf(buf, bufsize, "%s%s %s%d", COLOR1, ssid, COLOR2, qual);
 		close(sockfd);
 	} else
-		snprintf(buf, bufsize, "%cEth\x02No", '\x01');
+		snprintf(buf, bufsize, "%sEth %sNo", COLOR1, COLOR2);
 }
 
-void get_mpd(char *buf, int bufsize)
+void get_mpd(char *buf, size_t bufsize)
 {
 	const char *artist = NULL, *title = NULL;
 	struct mpd_connection *conn;
@@ -173,7 +174,7 @@ void get_mpd(char *buf, int bufsize)
 			song = mpd_recv_song(conn);
 			artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
 			title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
-			snprintf(buf, bufsize, "\x01%s\x02%s", artist, title);
+			snprintf(buf, bufsize, "%s%s %s%s", COLOR1, artist, COLOR2, title);
 			mpd_song_free(song);
 		} else
 			buf[0] = '\0';
@@ -182,34 +183,25 @@ void get_mpd(char *buf, int bufsize)
 	mpd_connection_free(conn);
 }
 
-void get_vol(char *buf, int bufsize)
+void get_vol(char *buf, size_t bufsize)
 {
 	FILE *fp;
 	char vol[4];
 	
 	fp = fopen(VOLUME, "r");
 	if(fp == NULL)
-		snprintf(buf, bufsize, "\x01Vol\x02N/A");
+		snprintf(buf, bufsize, "%sVol %sN/A", COLOR1, COLOR2);
 	else {
 		fscanf(fp, "%s", vol);
 		fclose(fp);
-		snprintf(buf, bufsize, "\x01Vol\x02%s", vol);
+		snprintf(buf, bufsize, "%sVol %s%s", COLOR1, COLOR2, vol);
 	}
 }
 
 int main(void)
 {
-	Display *dpy;
-	Window root;
-	char status[512], time[32], net[64], mpd[128], vol[16], bat[16], cpu[16], mem[16];
+	char time[67], net[128], mpd[128], vol[34], bat[34], cpu[34], mem[34];
 	long total_jiffies, work_jiffies;
-
-	dpy = XOpenDisplay(NULL);
-	if(dpy == NULL) {
-		fprintf(stderr, "error: could not open display\n");
-		return 1;
-	}
-	root = XRootWindow(dpy, DefaultScreen(dpy));
 
 	total_jiffies = TOTAL_JIFFIES;
 	work_jiffies = WORK_JIFFIES;
@@ -223,16 +215,14 @@ int main(void)
 		get_mpd(mpd, sizeof(mpd));
 		get_vol(vol, sizeof(vol));
 
-		snprintf(status, sizeof(status), "%s %s %s %s %s %s %s", mpd, cpu, mem, bat, net, vol, time);
+		fprintf(stdout, "S%s  %s  %s  %s  %s  %s  %s\n", mpd, cpu, mem, bat, net, vol, time);
 
 		total_jiffies = TOTAL_JIFFIES;
 		work_jiffies = WORK_JIFFIES;
 
-		XStoreName(dpy, root, status);
-		XFlush(dpy);
+		fflush(stdout);
 		sleep(UPDATE_INTERVAL);
 	}
 
-	XCloseDisplay(dpy);
 	return 0;
 }

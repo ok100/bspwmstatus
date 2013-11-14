@@ -1,8 +1,8 @@
-all: dwmstatus
+all: bspwmstatus
 
-dwmstatus: dwmstatus.c
-	gcc -Wall -Wextra -Os -lmpdclient -lX11 -o dwmstatus dwmstatus.c
-	strip dwmstatus
+bspwmstatus: bspwmstatus.c
+	gcc -Wall -Wextra -Os -lmpdclient -o bspwmstatus bspwmstatus.c
+	strip bspwmstatus
 
 clean:
-	rm dwmstatus
+	rm bspwmstatus
