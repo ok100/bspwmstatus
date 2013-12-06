@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,10 +10,17 @@
 #include <linux/wireless.h>
 #include <mpd/client.h>
 
+#define PANEL_FIFO      "/tmp/panel-fifo"
+#define PANEL_WIDTH     195
+#define UPDATE_INTERVAL 2
+
 #define COLOR1          "^fg(#6B5A4B)"
 #define COLOR2          "^fg(#9A875F)"
-#define UPDATE_INTERVAL 2
-#define CLOCK_FORMAT    "^fg(#6B5A4B)%a ^fg(#9A875F)%d ^fg(#6B5A4B)%b ^fg(#9A875F)%H:%M"
+#define COLOR_SEL       "^fg(#BEA492)"
+#define COLOR_URG       "^fg(#9F7155)"
+#define OCCUPIED        "▘"
+#define CLOCK_FORMAT    "^ca(1, gsimplecal)^fg(#6B5A4B)%a ^fg(#9A875F)%d ^fg(#6B5A4B)%b ^fg(#9A875F)%H:%M ^ca()"
+
 #define WIRED_DEVICE    "enp3s0"
 #define WIRELESS_DEVICE "wlp2s0"
 #define BATTERY_FULL    "/sys/class/power_supply/BAT0/energy_full"
@@ -22,6 +30,9 @@
 
 #define TOTAL_JIFFIES get_jiffies(7)
 #define WORK_JIFFIES get_jiffies(3)
+
+char wm[1024] = {'\0'};
+char status[1024] = {'\0'};
 
 void get_time(char *buf, size_t bufsize)
 {
@@ -39,8 +50,9 @@ void get_mem(char *buf, size_t bufsize)
 	fp = fopen("/proc/meminfo", "r");
 	if(fp != NULL) {
 		fscanf(fp, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
-			&total, &free, &buffers, &cached);
-		snprintf(buf, bufsize, "%sMem %s%.2f", COLOR1, COLOR2, (total - free - buffers - cached) / total);
+				&total, &free, &buffers, &cached);
+		snprintf(buf, bufsize, "%sMem %s%.2f", COLOR1, COLOR2,
+				(total - free - buffers - cached) / total);
 		fclose(fp);
 	} else
 		snprintf(buf, bufsize, "%sMem %sN/A", COLOR1, COLOR2);
@@ -198,14 +210,54 @@ void get_vol(char *buf, size_t bufsize)
 	}
 }
 
-int main(void)
+int dzen_strlen(char *str)
 {
-	char time[67], net[128], mpd[128], vol[34], bat[34], cpu[34], mem[34];
+	int len = 0;
+	int x = 0;
+	size_t i;
+
+	for(i = 0; i < strlen(str); i++) {
+		switch(str[i]) {
+		case '^':
+			x = 1;
+			continue;
+		case ')':
+			if(x) {
+				x = 0;
+				continue;
+			}
+			break;
+		case -30:
+			continue;
+		case -106:
+			continue;
+		}
+		if(!x)
+			len++;
+	}
+
+	return len;
+}
+
+void print_bar(void)
+{
+	int i;
+
+	printf("%s", wm);
+	for(i = 0; i < PANEL_WIDTH - dzen_strlen(wm) - dzen_strlen(status); i++)
+		putchar(' ');
+	printf("%s\n", status);
+	fflush(stdout);
+}
+
+void *update_status(void *ptr)
+{
+	char time[128], net[128], mpd[128], vol[34], bat[34], cpu[34], mem[34];
 	long total_jiffies, work_jiffies;
 
 	total_jiffies = TOTAL_JIFFIES;
 	work_jiffies = WORK_JIFFIES;
-	
+
 	while(1) {
 		get_cpu(cpu, sizeof(cpu), total_jiffies, work_jiffies);
 		get_mem(mem, sizeof(mem));
@@ -215,14 +267,69 @@ int main(void)
 		get_mpd(mpd, sizeof(mpd));
 		get_vol(vol, sizeof(vol));
 
-		fprintf(stdout, "S%s  %s  %s  %s  %s  %s  %s\n", mpd, cpu, mem, bat, net, vol, time);
+		snprintf(status, sizeof(status), "%s  %s  %s  %s  %s  %s  %s",
+				mpd, cpu, mem, bat, net, vol, time);
 
 		total_jiffies = TOTAL_JIFFIES;
 		work_jiffies = WORK_JIFFIES;
 
-		fflush(stdout);
+		print_bar();
+
 		sleep(UPDATE_INTERVAL);
 	}
+}
+
+int main(void)
+{
+	FILE *fifo;
+	pthread_t thread;
+	char buf[1024];
+	char *d;
+
+	fifo = fopen(PANEL_FIFO, "r");
+	if(fifo == NULL) {
+		fputs("error: failed to open panel fifo\n", stderr);
+		return 1;
+	}
+
+	if(pthread_create(&thread, NULL, update_status, NULL) != 0) {
+		fputs("error: failed to create new thread\n", stderr);
+		return 1;
+	}
+
+	while(fgets(buf, sizeof(buf), fifo) != NULL) {
+		buf[strlen(buf) - 1] = '\0';
+		wm[0] = '\0';
+		strtok(buf, ":");
+		while((d = strtok(NULL, ":")) != NULL) {
+			if(d[0] == 'L')
+				break;
+			strncat(wm, " ", sizeof(wm));
+
+			// Selected
+			if(isupper(*d))
+				strncat(wm, COLOR_SEL, sizeof(wm));
+			else
+				strncat(wm, COLOR1, sizeof(wm)); 
+
+			// Urgent
+			if(*d == 'u')
+				strncat(wm, COLOR_URG, sizeof(wm));
+			
+			// Occupied
+			if(*d == 'o' || *d == 'O' || *d == 'u' || *d == 'U')
+				strncat(wm, OCCUPIED, sizeof(wm));
+			else
+				strncat(wm, " ", sizeof(wm));
+			
+			// Desktop name
+			strncat(wm, d + 1, sizeof(wm));
+		}
+		print_bar();
+	}
+
+	pthread_exit(&thread);
+	fclose(fifo);
 
 	return 0;
 }
