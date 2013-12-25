@@ -5,21 +5,23 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <linux/wireless.h>
 #include <mpd/client.h>
 
+////////////////////////////////////////////////////////////////////////////////
 #define PANEL_FIFO      "/tmp/panel-fifo"
 #define PANEL_WIDTH     195
 #define UPDATE_INTERVAL 2
 
-#define COLOR1          "^fg(#6B5A4B)"
-#define COLOR2          "^fg(#9A875F)"
-#define COLOR_SEL       "^fg(#BEA492)"
-#define COLOR_URG       "^fg(#9F7155)"
+#define COLOR1          "^fg(#707880)"
+#define COLOR2          "^fg(#ABADAC)"
+#define COLOR_SEL       "^fg(#C5C8C6)"
+#define COLOR_URG       "^fg(#CC6666)"
 #define OCCUPIED        "▘"
-#define CLOCK_FORMAT    "^ca(1, gsimplecal)^fg(#6B5A4B)%a ^fg(#9A875F)%d ^fg(#6B5A4B)%b ^fg(#9A875F)%H:%M ^ca()"
+#define CLOCK_FORMAT    "^ca(1, gsimplecal)^fg(#707880)%a ^fg(#ABADAC)%d ^fg(#707880)%b ^fg(#ABADAC)%H:%M ^ca()"
 
 #define WIRED_DEVICE    "enp3s0"
 #define WIRELESS_DEVICE "wlp2s0"
@@ -27,12 +29,15 @@
 #define BATTERY_NOW     "/sys/class/power_supply/BAT0/energy_now"
 #define ON_AC           "/sys/class/power_supply/ADP1/online"
 #define VOLUME          "/home/ok/.volume"
+////////////////////////////////////////////////////////////////////////////////
 
-#define TOTAL_JIFFIES get_jiffies(7)
-#define WORK_JIFFIES get_jiffies(3)
+#define TOTAL_JIFFIES   get_jiffies(7)
+#define WORK_JIFFIES    get_jiffies(3)
+#define EVENT_BUF_LEN   (1024 * (sizeof(struct inotify_event) + 16))
 
 char wm[1024] = {'\0'};
 char status[1024] = {'\0'};
+long total_jiffies, work_jiffies;
 
 void get_time(char *buf, size_t bufsize)
 {
@@ -104,7 +109,7 @@ long get_jiffies(int n)
 	return jiffies;
 }
 
-void get_cpu(char *buf, size_t bufsize, long total_jiffies, long work_jiffies)
+void get_cpu(char *buf, size_t bufsize)
 {
 	long work_over_period, total_over_period;
 	float cpu;
@@ -250,50 +255,81 @@ void print_bar(void)
 	fflush(stdout);
 }
 
-void *update_status(void *ptr)
+void update_status(void)
 {
 	char time[128], net[128], mpd[128], vol[34], bat[34], cpu[34], mem[34];
-	long total_jiffies, work_jiffies;
 
-	total_jiffies = TOTAL_JIFFIES;
-	work_jiffies = WORK_JIFFIES;
+	get_cpu(cpu, sizeof(cpu));
+	get_mem(mem, sizeof(mem));
+	get_bat(bat, sizeof(bat));
+	get_net(net, sizeof(net));
+	get_time(time, sizeof(time));
+	get_mpd(mpd, sizeof(mpd));
+	get_vol(vol, sizeof(vol));
 
+	snprintf(status, sizeof(status), "%s  %s  %s  %s  %s  %s  %s",
+			mpd, cpu, mem, bat, net, vol, time);
+}
+
+void *status_loop(void *ptr)
+{
 	while(1) {
-		get_cpu(cpu, sizeof(cpu), total_jiffies, work_jiffies);
-		get_mem(mem, sizeof(mem));
-		get_bat(bat, sizeof(bat));
-		get_net(net, sizeof(net));
-		get_time(time, sizeof(time));
-		get_mpd(mpd, sizeof(mpd));
-		get_vol(vol, sizeof(vol));
-
-		snprintf(status, sizeof(status), "%s  %s  %s  %s  %s  %s  %s",
-				mpd, cpu, mem, bat, net, vol, time);
+		update_status();
+		print_bar();
 
 		total_jiffies = TOTAL_JIFFIES;
 		work_jiffies = WORK_JIFFIES;
-
-		print_bar();
 
 		sleep(UPDATE_INTERVAL);
 	}
 }
 
+void *volume_loop(void *ptr)
+{
+	int fd, wd;
+	char buf[EVENT_BUF_LEN];
+
+	fd = inotify_init();
+	if(fd == -1)
+		perror("error: failed to initialize inotify");
+
+	wd = inotify_add_watch(fd, VOLUME, IN_MODIFY);
+	if(wd == -1)
+		perror("error: failed to add inotify watch");
+
+	while(1) {
+		read(fd, buf, EVENT_BUF_LEN);
+		update_status();
+		print_bar();
+	}
+
+	inotify_rm_watch(fd, wd);
+	close(fd);
+}
+
 int main(void)
 {
 	FILE *fifo;
-	pthread_t thread;
+	pthread_t sl, vl;
 	char buf[1024];
 	char *d;
 
+	total_jiffies = TOTAL_JIFFIES;
+	work_jiffies = WORK_JIFFIES;
+
 	fifo = fopen(PANEL_FIFO, "r");
 	if(fifo == NULL) {
-		fputs("error: failed to open panel fifo\n", stderr);
+		perror("error: failed to open panel fifo");
 		return 1;
 	}
 
-	if(pthread_create(&thread, NULL, update_status, NULL) != 0) {
-		fputs("error: failed to create new thread\n", stderr);
+	if(pthread_create(&sl, NULL, status_loop, NULL) != 0) {
+		perror("error: failed to create status thread");
+		return 1;
+	}
+	
+	if(pthread_create(&vl, NULL, volume_loop, NULL) != 0) {
+		perror("error: failed to create volume thread");
 		return 1;
 	}
 
@@ -304,7 +340,6 @@ int main(void)
 		while((d = strtok(NULL, ":")) != NULL) {
 			if(d[0] == 'L')
 				break;
-			strncat(wm, " ", sizeof(wm));
 
 			// Selected
 			if(isupper(*d))
@@ -324,11 +359,14 @@ int main(void)
 			
 			// Desktop name
 			strncat(wm, d + 1, sizeof(wm));
+
+			strncat(wm, " ", sizeof(wm));
 		}
 		print_bar();
 	}
 
-	pthread_exit(&thread);
+	pthread_exit(&sl);
+	pthread_exit(&vl);
 	fclose(fifo);
 
 	return 0;
