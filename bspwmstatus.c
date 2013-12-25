@@ -20,6 +20,7 @@
 #define COLOR2          "^fg(#ABADAC)"
 #define COLOR_SEL       "^fg(#C5C8C6)"
 #define COLOR_URG       "^fg(#CC6666)"
+#define COLOR_BG        "^bg(#1D1F21)"
 #define OCCUPIED        "▘"
 #define CLOCK_FORMAT    "^ca(1, gsimplecal)%s%%a %s%%d %s%%b %s%%H:%%M ^ca()"
 #define STATUS_FORMAT   "%s  %s  %s  %s  %s  %s  %s", mpd, cpu, mem, bat, net, vol, time
@@ -251,7 +252,7 @@ void print_bar(void)
 {
 	int i;
 
-	printf("%s", wm);
+	printf("%s%s", wm, COLOR_BG);
 	for(i = 0; i < PANEL_WIDTH - dzen_strlen(wm) - dzen_strlen(status); i++)
 		putchar(' ');
 	printf("%s\n", status);
