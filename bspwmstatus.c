@@ -21,7 +21,8 @@
 #define COLOR_SEL       "^fg(#C5C8C6)"
 #define COLOR_URG       "^fg(#CC6666)"
 #define OCCUPIED        "▘"
-#define CLOCK_FORMAT    "^ca(1, gsimplecal)^fg(#707880)%a ^fg(#ABADAC)%d ^fg(#707880)%b ^fg(#ABADAC)%H:%M ^ca()"
+#define CLOCK_FORMAT    "^ca(1, gsimplecal)%s%%a %s%%d %s%%b %s%%H:%%M ^ca()"
+#define STATUS_FORMAT   "%s  %s  %s  %s  %s  %s  %s", mpd, cpu, mem, bat, net, vol, time
 
 #define WIRED_DEVICE    "enp3s0"
 #define WIRELESS_DEVICE "wlp2s0"
@@ -42,9 +43,11 @@ long total_jiffies, work_jiffies;
 void get_time(char *buf, size_t bufsize)
 {
 	time_t tm;
+	char fmt[bufsize];
 
 	time(&tm);
-	strftime(buf, bufsize, CLOCK_FORMAT, localtime(&tm));
+	snprintf(fmt, bufsize, CLOCK_FORMAT, COLOR1, COLOR2, COLOR1, COLOR2);
+	strftime(buf, bufsize, fmt, localtime(&tm));
 }
 
 void get_mem(char *buf, size_t bufsize)
@@ -267,8 +270,7 @@ void update_status(void)
 	get_mpd(mpd, sizeof(mpd));
 	get_vol(vol, sizeof(vol));
 
-	snprintf(status, sizeof(status), "%s  %s  %s  %s  %s  %s  %s",
-			mpd, cpu, mem, bat, net, vol, time);
+	snprintf(status, sizeof(status), STATUS_FORMAT);
 }
 
 void *status_loop(void *ptr)
