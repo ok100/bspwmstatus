@@ -14,7 +14,7 @@ Edit the `config.h` file to match your setup and run `make`.
 
 Usage
 -----
-Add the following lines into your bspwm config file (`~/.config/bspwm/bspwmrc``):
+Add the following lines into your bspwm config file (`~/.config/bspwm/bspwmrc`):
 
 	PANEL_HEIGHT=16
 	PANEL_FIFO="/tmp/panel-fifo"
