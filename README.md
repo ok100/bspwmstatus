@@ -10,21 +10,26 @@ To build bspwmstatus, you will need the following libraries:
 
 * libmpdclient
 
-Edit the source file to match your setup and run *make*.
+Edit the `config.h` file to match your setup and run `make`.
 
 Usage
 -----
-Add the following lines into your bspwm config file (*~/.config/bspwm/bspwmrc*):
+Add the following lines into your bspwm config file (`~/.config/bspwm/bspwmrc``):
 
-    [ -e "$PANEL_FIFO" ] && rm "$PANEL_FIFO"
-    mkfifo "$PANEL_FIFO"
-    
-    bspc config top_padding $PANEL_HEIGHT
-    
-    bspc control --subscribe > "$PANEL_FIFO" &
-    bspwmstatus | dzen2 -fn "DejaVu Sans Mono:size=9" -h $PANEL_HEIGHT -ta l &
+	PANEL_HEIGHT=16
+	PANEL_FIFO="/tmp/panel-fifo"
+	PANEL_FONT="DejaVu Sans Mono:size=9"
 
-and make sure you have defined the *PANEL_FIFO* and *PANEL_HEIGHT* environment variables.
+	bspc config top_padding $PANEL_HEIGHT
 
-*Note:* Volume status is read from file `$HOME/.volume`. To have this file updated
-automatically, you can bind the script `volume` to your volume control keys.
+	killall bspwmstatus dzen2 bspc xtitle
+
+	[ -e "$PANEL_FIFO" ] && rm "$PANEL_FIFO"
+	mkfifo "$PANEL_FIFO"
+
+	bspc control --subscribe > "$PANEL_FIFO" &
+	xtitle -sf 'T%s' > "$PANEL_FIFO" &  # Optional: for window title
+	bspwmstatus | dzen2 -fn "$PANEL_FONT" -h $PANEL_HEIGHT -ta l &
+
+**Note:** Volume status is read from file `$HOME/.volume`. To have this file updated
+automatically, you can bind included script `volume` to your volume control keys.

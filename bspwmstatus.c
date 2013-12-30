@@ -11,27 +11,7 @@
 #include <linux/wireless.h>
 #include <mpd/client.h>
 
-////////////////////////////////////////////////////////////////////////////////
-#define PANEL_FIFO      "/tmp/panel-fifo"
-#define PANEL_WIDTH     195
-#define UPDATE_INTERVAL 2
-
-#define COLOR1          "^fg(#707880)"
-#define COLOR2          "^fg(#ABADAC)"
-#define COLOR_SEL       "^fg(#C5C8C6)"
-#define COLOR_URG       "^fg(#CC6666)"
-#define COLOR_BG        "^bg(#1D1F21)"
-#define OCCUPIED        "▘"
-#define CLOCK_FORMAT    "^ca(1, gsimplecal)%s%%a %s%%d %s%%b %s%%H:%%M ^ca()"
-#define STATUS_FORMAT   "%s  %s  %s  %s  %s  %s  %s", mpd, cpu, mem, bat, net, vol, time
-
-#define WIRED_DEVICE    "enp3s0"
-#define WIRELESS_DEVICE "wlp2s0"
-#define BATTERY_FULL    "/sys/class/power_supply/BAT0/energy_full"
-#define BATTERY_NOW     "/sys/class/power_supply/BAT0/energy_now"
-#define ON_AC           "/sys/class/power_supply/ADP1/online"
-#define VOLUME          "/home/ok/.volume"
-////////////////////////////////////////////////////////////////////////////////
+#include "config.h"
 
 #define TOTAL_JIFFIES   get_jiffies(7)
 #define WORK_JIFFIES    get_jiffies(3)
@@ -39,6 +19,7 @@
 
 char wm[1024] = {'\0'};
 char status[1024] = {'\0'};
+char title[1024] = {'\0'};
 long total_jiffies, work_jiffies;
 
 void get_time(char *buf, size_t bufsize)
@@ -226,22 +207,13 @@ int dzen_strlen(char *str)
 	size_t i;
 
 	for(i = 0; i < strlen(str); i++) {
-		switch(str[i]) {
-		case '^':
+		if((str[i] & 0xc0) == 0x80)
+			continue;
+		if(str[i] == '^')
 			x = 1;
-			continue;
-		case ')':
-			if(x) {
-				x = 0;
-				continue;
-			}
-			break;
-		case -30:
-			continue;
-		case -106:
-			continue;
-		}
-		if(!x)
+		else if(str[i] == ')' && x)
+			x = 0;
+		else if(!x)
 			len++;
 	}
 
@@ -251,17 +223,31 @@ int dzen_strlen(char *str)
 void print_bar(void)
 {
 	int i;
+	int len;
+	char t[1024];
 
-	printf("%s%s", wm, COLOR_BG);
-	for(i = 0; i < PANEL_WIDTH - dzen_strlen(wm) - dzen_strlen(status); i++)
+	strncpy(t, title, sizeof(t));
+	len = dzen_strlen(wm) + dzen_strlen(status) + 5;
+
+	// Shorten the window title if it's too long
+	if((int)dzen_strlen(t) > PANEL_WIDTH - len) {
+		t[PANEL_WIDTH - len] = '\0';
+		for(i = 1; i <= 3; i++)
+			t[dzen_strlen(t) - i] = '.';
+	}
+
+	len += dzen_strlen(t);
+	printf("%s  %s%s", wm, COLOR_TITLE, t);
+
+	for(i = 0; i < PANEL_WIDTH - len + 3; i++)
 		putchar(' ');
-	printf("%s\n", status);
+	printf("%s%s\n", COLOR_BG, status);
 	fflush(stdout);
 }
 
 void update_status(void)
 {
-	char time[128], net[128], mpd[128], vol[34], bat[34], cpu[34], mem[34];
+	char time[128], net[128], mpd[128], vol[64], bat[64], cpu[64], mem[64];
 
 	get_cpu(cpu, sizeof(cpu));
 	get_mem(mem, sizeof(mem));
@@ -337,33 +323,42 @@ int main(void)
 	}
 
 	while(fgets(buf, sizeof(buf), fifo) != NULL) {
-		buf[strlen(buf) - 1] = '\0';
-		wm[0] = '\0';
-		strtok(buf, ":");
-		while((d = strtok(NULL, ":")) != NULL) {
-			if(d[0] == 'L')
-				break;
+		buf[strlen(buf) - 1] = '\0';  // Strip newline character
+		switch(*buf) {
+		case 'T':
+			// Window title
+			strncpy(title, buf + 1, sizeof(title));
+			break;
+		case 'W':
+			// BSPWM status
+			*wm = '\0';
+			strtok(buf, ":");
+			while((d = strtok(NULL, ":")) != NULL) {
+				if(*d == 'L')
+					break;
 
-			// Selected
-			if(isupper(*d))
-				strncat(wm, COLOR_SEL, sizeof(wm));
-			else
-				strncat(wm, COLOR1, sizeof(wm)); 
+				// Selected
+				if(isupper(*d))
+					strncat(wm, COLOR_SEL, sizeof(wm));
+				else
+					strncat(wm, COLOR1, sizeof(wm)); 
 
-			// Urgent
-			if(*d == 'u')
-				strncat(wm, COLOR_URG, sizeof(wm));
-			
-			// Occupied
-			if(*d == 'o' || *d == 'O' || *d == 'u' || *d == 'U')
-				strncat(wm, OCCUPIED, sizeof(wm));
-			else
+				// Urgent
+				if(*d == 'u')
+					strncat(wm, COLOR_URG, sizeof(wm));
+				
+				// Occupied
+				if(*d == 'o' || *d == 'O' || *d == 'u' || *d == 'U')
+					strncat(wm, OCCUPIED, sizeof(wm));
+				else
+					strncat(wm, " ", sizeof(wm));
+				
+				// Desktop name
+				strncat(wm, d + 1, sizeof(wm));
+
 				strncat(wm, " ", sizeof(wm));
-			
-			// Desktop name
-			strncat(wm, d + 1, sizeof(wm));
-
-			strncat(wm, " ", sizeof(wm));
+			}
+			break;
 		}
 		print_bar();
 	}
