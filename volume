@@ -5,8 +5,8 @@
 #        volume toggle
 
 case $1 in
-	"up")     ponymix increase 5 ;;
-	"down")   ponymix decrease 5 ;;
+	"up")     ponymix increase 2 ;;
+	"down")   ponymix decrease 2 ;;
 	"toggle") ponymix toggle     ;;
 esac
 

@@ -10,7 +10,7 @@
 #define COLOR_TITLE     "^fg(#C5C8C6)"
 #define OCCUPIED        "▘"
 #define CLOCK_FORMAT    "^ca(1, gsimplecal)%s%%a %s%%d %s%%b %s%%H:%%M ^ca()"
-#define STATUS_FORMAT   "%s  %s  %s  %s  %s  %s  %s", mpd, cpu, mem, bat, net, vol, time
+#define STATUS_FORMAT   "%s  %s  %s  %s  %s  %s  %s ", mpd, cpu, mem, bat, net, vol, time
 
 #define WIRED_DEVICE    "enp3s0"
 #define WIRELESS_DEVICE "wlp2s0"

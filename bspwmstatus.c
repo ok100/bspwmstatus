@@ -41,9 +41,9 @@ void get_mem(char *buf, size_t bufsize)
 	if(fp != NULL) {
 		fscanf(fp, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
 				&total, &free, &buffers, &cached);
+		fclose(fp);
 		snprintf(buf, bufsize, "%sMem %s%.2f", COLOR1, COLOR2,
 				(total - free - buffers - cached) / total);
-		fclose(fp);
 	} else
 		snprintf(buf, bufsize, "%sMem %sN/A", COLOR1, COLOR2);
 }
@@ -63,10 +63,7 @@ void get_bat(char *buf, size_t bufsize)
 		fscanf(f1p, "%f", &now);
 		fscanf(f2p, "%f", &full);
 		fscanf(f3p, "%d", &ac);
-		if(ac)
-			snprintf(buf, bufsize, "%sAc %s%.2f", COLOR1, COLOR2, now / full);
-		else
-			snprintf(buf, bufsize, "%sBat %s%.2f", COLOR1, COLOR2, now / full);
+		snprintf(buf, bufsize, "%s%s %s%.2f", COLOR1, ac ? "Ac" : "Bat", COLOR2, now / full);
 	}
 	if(f1p != NULL)
 		fclose(f1p);
@@ -104,7 +101,7 @@ void get_cpu(char *buf, size_t bufsize)
 	if(total_over_period > 0)
 		cpu = (float)work_over_period / (float)total_over_period;
 	else
-		cpu = 0.;
+		cpu = 0;
 	snprintf(buf, bufsize, "%sCpu %s%.2f", COLOR1, COLOR2, cpu);
 }
 
@@ -119,7 +116,7 @@ int is_up(char *device)
 		return 0;
 	fscanf(fp, "%s", state);
 	fclose(fp);
-	if(strcmp(state, "up") == 0)
+	if(strncmp(state, "up", 2) == 0)
 		return 1;
 	return 0;
 }
@@ -191,57 +188,54 @@ void get_vol(char *buf, size_t bufsize)
 	char vol[4];
 	
 	fp = fopen(VOLUME, "r");
-	if(fp == NULL)
-		snprintf(buf, bufsize, "%sVol %sN/A", COLOR1, COLOR2);
-	else {
+	if(fp != NULL) {
 		fscanf(fp, "%s", vol);
 		fclose(fp);
-		snprintf(buf, bufsize, "%sVol %s%s", COLOR1, COLOR2, vol);
 	}
+	snprintf(buf, bufsize, "%sVol %s%s", COLOR1, COLOR2, fp != NULL ? vol : "N/A");
 }
 
 int dzen_strlen(char *str)
 {
 	int len = 0;
-	int x = 0;
 	size_t i;
 
 	for(i = 0; i < strlen(str); i++) {
-		if((str[i] & 0xc0) == 0x80)
-			continue;
-		if(str[i] == '^')
-			x = 1;
-		else if(str[i] == ')' && x)
-			x = 0;
-		else if(!x)
+		if(str[i] == '^' && i + 3 < strlen(str) && str[i + 3] == '(')
+			while(str[i] != ')')
+				i++;
+		else if((str[i] & 0xc0) != 0x80)
 			len++;
 	}
-
 	return len;
 }
 
 void print_bar(void)
 {
-	int i;
+	size_t i, j;
 	int len;
-	char t[1024];
 
-	strncpy(t, title, sizeof(t));
 	len = dzen_strlen(wm) + dzen_strlen(status) + 5;
-
-	// Shorten the window title if it's too long
-	if((int)dzen_strlen(t) > PANEL_WIDTH - len) {
-		t[PANEL_WIDTH - len] = '\0';
-		for(i = 1; i <= 3; i++)
-			t[dzen_strlen(t) - i] = '.';
+	printf("%s   %s", wm, COLOR_TITLE);
+	for(i = 0; i < strlen(title); i++) {
+		if((title[i] & 0xc0) == 0x80) {
+			putchar(title[i]);
+			continue;
+		}
+		len++;
+		if(len + 2 == PANEL_WIDTH && i + 3 < strlen(title)) {
+			for(j = 0; j < 3; j++)
+				putchar('.');
+			len = PANEL_WIDTH;
+			break;
+		}
+		putchar(title[i]);
 	}
-
-	len += dzen_strlen(t);
-	printf("%s  %s%s", wm, COLOR_TITLE, t);
-
-	for(i = 0; i < PANEL_WIDTH - len + 3; i++)
+	while(len < PANEL_WIDTH) {
+		len++;
 		putchar(' ');
-	printf("%s%s\n", COLOR_BG, status);
+	}
+	printf("   %s%s\n", COLOR_BG, status);
 	fflush(stdout);
 }
 
@@ -337,17 +331,13 @@ int main(void)
 				if(*d == 'L')
 					break;
 
-				// Selected
-				if(isupper(*d))
-					strncat(wm, COLOR_SEL, sizeof(wm));
-				else
-					strncat(wm, COLOR1, sizeof(wm)); 
-
-				// Urgent
+				// Desktop color
 				if(*d == 'u')
 					strncat(wm, COLOR_URG, sizeof(wm));
+				else
+					strncat(wm, isupper(*d) ? COLOR_SEL : COLOR1, sizeof(wm));
 				
-				// Occupied
+				// Occupied character
 				if(*d == 'o' || *d == 'O' || *d == 'u' || *d == 'U')
 					strncat(wm, OCCUPIED, sizeof(wm));
 				else
@@ -358,6 +348,7 @@ int main(void)
 
 				strncat(wm, " ", sizeof(wm));
 			}
+			wm[strlen(wm) - 1] = '\0';
 			break;
 		}
 		print_bar();
