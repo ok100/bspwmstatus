@@ -230,6 +230,8 @@ void print_bar(void)
 			break;
 		}
 		putchar(title[i]);
+		if(title[i] == '^')
+			putchar('^');
 	}
 	while(len < PANEL_WIDTH) {
 		len++;
