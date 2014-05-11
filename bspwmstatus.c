@@ -39,7 +39,7 @@ void get_mem(char *buf, size_t bufsize)
 
 	fp = fopen("/proc/meminfo", "r");
 	if(fp != NULL) {
-		fscanf(fp, "MemTotal: %f kB\nMemFree: %f kB\nBuffers: %f kB\nCached: %f kB\n",
+		fscanf(fp, "MemTotal: %f kB\nMemFree: %f kB\nMemAvailable: %*[0-9] kB\nBuffers: %f kB\nCached: %f kB\n",
 				&total, &free, &buffers, &cached);
 		fclose(fp);
 		snprintf(buf, bufsize, "%sMem %s%.2f", COLOR1, COLOR2,
@@ -95,7 +95,7 @@ void get_cpu(char *buf, size_t bufsize)
 {
 	long work_over_period, total_over_period;
 	float cpu;
-	
+
 	work_over_period = WORK_JIFFIES - work_jiffies;
 	total_over_period = TOTAL_JIFFIES - total_jiffies;
 	if(total_over_period > 0)
@@ -127,7 +127,7 @@ void get_net(char *buf, size_t bufsize)
 	char ssid[IW_ESSID_MAX_SIZE + 1] = "N/A";
 	struct iwreq wreq;
 	struct iw_statistics stats;
-	
+
 	if(is_up(WIRED_DEVICE))
 		snprintf(buf, bufsize, "%sEth %sOn", COLOR1, COLOR2);
 	else if(is_up(WIRELESS_DEVICE)) {
@@ -186,7 +186,7 @@ void get_vol(char *buf, size_t bufsize)
 {
 	FILE *fp;
 	char vol[4];
-	
+
 	fp = fopen(VOLUME, "r");
 	if(fp != NULL) {
 		fscanf(fp, "%s", vol);
@@ -258,6 +258,8 @@ void update_status(void)
 
 void *status_loop(void *ptr)
 {
+	(void)ptr;
+
 	while(1) {
 		update_status();
 		print_bar();
@@ -273,6 +275,8 @@ void *volume_loop(void *ptr)
 {
 	int fd, wd;
 	char buf[EVENT_BUF_LEN];
+
+	(void)ptr;
 
 	fd = inotify_init();
 	if(fd == -1)
@@ -312,7 +316,7 @@ int main(void)
 		perror("error: failed to create status thread");
 		return 1;
 	}
-	
+
 	if(pthread_create(&vl, NULL, volume_loop, NULL) != 0) {
 		perror("error: failed to create volume thread");
 		return 1;
@@ -338,13 +342,13 @@ int main(void)
 					strncat(wm, COLOR_URG, sizeof(wm));
 				else
 					strncat(wm, isupper(*d) ? COLOR_SEL : COLOR1, sizeof(wm));
-				
+
 				// Occupied character
 				if(*d == 'o' || *d == 'O' || *d == 'u' || *d == 'U')
 					strncat(wm, OCCUPIED, sizeof(wm));
 				else
 					strncat(wm, " ", sizeof(wm));
-				
+
 				// Desktop name
 				strncat(wm, d + 1, sizeof(wm));
 

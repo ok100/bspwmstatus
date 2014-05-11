@@ -1,6 +1,6 @@
 #define PANEL_FIFO      "/tmp/panel-fifo"
 #define PANEL_WIDTH     195
-#define UPDATE_INTERVAL 2
+#define UPDATE_INTERVAL 5
 
 #define COLOR1          "^fg(#707880)"
 #define COLOR2          "^fg(#ABADAC)"
